@@ -4,16 +4,23 @@ import ast
 
 class MarkovChain():
 
-    def __init__(self, list_states: list[str], list_rewards: list[int]|None =None,  list_actions: list[str] | None = None, dict_trans: dict[str, list[tuple[str,str,int]]] | None = None):
+    def __init__(self, list_states: list[str], list_rewards: list[int]|None = None,  list_actions: list[str] | None = None, dict_trans: dict[str, list[tuple[str,str,int]]] | None = None):
         """ Creates a Markov chain or decision process from a list of states, a list of actions, and a dictionnary of transactions grouped by action"""
         
         self.n = len(list_states)
         self.states = list_states
+
+        # Building the list of actions used
         if list_actions:
+            for a in list_actions:
+                #removing dummy actions that do not have an associated transition
+                if not a in dict_trans.keys():
+                    list_actions.remove(a)
             self.actions = list_actions+[""]
         else:
             self.actions=[""]
 
+        #building reward dict
         if list_rewards is not None:
             if len(list_rewards)!=len(list_states):
                 raise Exception("Please assign a reward to each and every state")
@@ -27,13 +34,13 @@ class MarkovChain():
 
         for act in self.chain:
 
-
+            
             trans = dict_trans[act]
             
             for start, end, w in trans:
                 j = self.states.index(start)
                 i = self.states.index(end)
-                self.chain[act] [i][j]= w 
+                self.chain[act] [j][i]= w 
 
 
 
@@ -63,7 +70,7 @@ class MarkovChain():
 
             for j in range(self.n):
                 if self.chain[a][i][j]>0:
-                    # there is a valid transaction for action a
+                    # there is a valid transaction for action a from i to j
                     res.append(a)
                     break
         return res
@@ -140,7 +147,7 @@ class MarkovChain():
             logs then returns its path and its probability, and the choices made"""
         chosen_method=input(f"Do you want a random choice (answer 1) \n a given controller(answer 2)")
         if int(chosen_method) not in [1,2]:
-            chosen_method=input(f"Pleas e choose between 1 and 2")
+            chosen_method=input(f"Please choose between 1 and 2")
         match int(chosen_method):
             case 1:
                 chemin, choices, proba, tot_reward=self.simulation_MDP_random(n_transitions)
@@ -195,22 +202,48 @@ class MarkovChain():
             
             choices.append(chosen_act)
             probs=self.chain[chosen_act][cur_i]
-            chosen_state=rd.choice(self.states, p=probs)
+            chosen_state=rd.choices(self.states, weights=probs, k=1)[0]
             chemin.append(chosen_state)
             cur_i= self.states.index(chosen_state)
             tot_prob*=probs[cur_i]/10
         if self.rewards_dict:
             return chemin, choices, tot_prob, tot_reward
         return chemin, choices, tot_prob, None
+
+
+    def check_MC(self):
+        if self.actions!=[''] or len(self.chain.keys())>1:
+            return False
+        return True
+
+    def get_previous_states_MC(self, state):
+        i = self.states.index(state)
+        res=[self.states[j] for j in range(self.n) if self.chain[''][j][i]>0]
+        return res
     
 
-
-    def get_initial_states(self, end_state):
+    def get_initial_states_MC(self, end_state):
         guaranteed_states=[end_state]
         unknown_states=[]
 
         guaranteed_copy=guaranteed_states.copy()
-        unknown_states=unknown_states.copy()
+        unknown_copy=unknown_states.copy()
+        is_changed=True
+        while is_changed:
+            guaranteed_states=guaranteed_copy.copy()
+            unknown_states=unknown_copy.copy()
+            for s in guaranteed_states+unknown_states:
+                for s2 in self.get_previous_states_MC(s):
+                    if s2 not in guaranteed_states:
+                        if self.chain[""][s2][s]==1.0:
+                            guaranteed_copy.append(s2)
+                        else:
+                            unknown_copy.append(s2)
+            is_changed= len(guaranteed_copy)!=len(guaranteed_states) or len(unknown_copy)!=unknown_states
+        return guaranteed_states, unknown_states
+        
+
+
 
 
     

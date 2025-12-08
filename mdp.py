@@ -44,7 +44,10 @@ class gramPrintListener(gramListener):
         ids = [str(x) for x in ctx.ID()]
         dep = ids.pop(0)
         weights = [int(str(x)) for x in ctx.INT()]
-        self.trans[""] = [(dep, ids[i], weights[i]) for i in range(len(ids))]
+        if "" in self.trans.keys():
+            self.trans[""] += [(dep, ids[i], weights[i]) for i in range(len(ids))]
+        else:
+            self.trans[""] = [(dep, ids[i], weights[i]) for i in range(len(ids))]
         print("Transition from " + dep + " with no action and targets " + str(ids) + " with weights " + str(weights))
 
 
@@ -61,8 +64,10 @@ def main():
     markov=MarkovChain(list_states=printer.states, list_actions= printer.actions, list_rewards= printer.rewards, dict_trans=printer.trans)
     markov.__repr__()
     print(markov.chain)
-    a,b,c,d=markov.simulation_MDP(10)
-    print(a,b,c,d)
+    a,b,c=markov.simulation_MC(10)
+    print(a,b,c)
+
+    print(markov.get_initial_states_MC('S4'))
 
 if __name__ == '__main__':
     main()
