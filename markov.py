@@ -251,7 +251,7 @@ class MarkovChain():
     def get_indices(self, l):
         return [self.states.index(s) for s in l]
 
-    def compute_accessibility_prob_MC(self, end_states):
+    def compute_accessibility_prob_linear_MC(self, end_states):
         guaranteed_states, unknown_states, forbidden_states=self.get_initial_states_MC(end_states)
         guaranteed_indices, unknown_indices, forbidden_indices=sorted(self.get_indices(guaranteed_states)), sorted(self.get_indices(unknown_states)), sorted(self.get_indices(forbidden_states))
         sum_val_l=[sum(self.chain[""][i]) for i in range(self.n)]
@@ -266,6 +266,51 @@ class MarkovChain():
         for j in unknown_indices:
             res[j]=probs_unknown[unknown_indices.index(j)]
         return res
+    
+    def compute_accessibility_prob_iterative_MDP(self, n_iter, end_states):
+        # TODO complete
+        pass
+    def compute_accessibility_prob_MDP(self, end_states):
+        # TODO complete
+        pass
+
+    
+
+    def SMC_quantitatif(self, end_states, n_limit, delta, epsilon):
+        if not self.check_MC():
+            raise Exception("SMC only with MC")
+        n_succ=0
+        n_simul=round((np.log(2)-np.log(delta))*(2*epsilon)**(-2))
+        for i in range(n_simul):
+            chemin, tot_prob, tot_reward=self.simulation_MC(n_limit)
+            for valid_state in end_states:
+                if valid_state in chemin:
+                    n_succ+=1
+                    break
+        return n_succ/n_simul, n_simul
+    
+    def SMC_qualitatif(self, end_states, n_limit, alpha, beta, theta, epsilon):
+        if not self.check_MC():
+            raise Exception("SMC only with MC")
+        rm=0
+        lima, limb=np.log((1-beta)/alpha), np.log(beta/(1-alpha))
+        m=0
+        dm=0
+        gamma1, gamma0=theta-epsilon, theta+epsilon
+        while rm <= lima and rm>=limb:
+            chemin, tot_prob, tot_reward=self.simulation_MC(n_limit)
+            m+=1
+            for valid_state in end_states:
+                if valid_state in chemin:
+                    dm+=1
+                    break
+            rm=dm*np.log(gamma1)+(m-dm)*np.log(1-gamma1)-(dm*np.log(gamma0)+(m-dm)*np.log(1-gamma0))
+        return rm<=limb, m
+
+
+
+        
+
 
 
     

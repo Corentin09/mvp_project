@@ -72,7 +72,10 @@ def main():
     print(a,b,c)
 
     print(markov.get_initial_states_MC(['S4']))
-    print(markov.compute_accessibility_prob_MC(['S4']))
+    print(markov.compute_accessibility_prob_linear_MC(['S4']))
+
+
+    print(markov.SMC_qualitatif(['S5'], 5, 0.01, 0.01, 0.32, 0.02))
 
 if __name__ == '__main__':
     main()
