@@ -71,7 +71,8 @@ def main():
     a,b,c=markov.simulation_MC(10)
     print(a,b,c)
 
-    print(markov.get_initial_states_MC('S4'))
+    print(markov.get_initial_states_MC(['S4']))
+    print(markov.compute_accessibility_prob_MC(['S4']))
 
 if __name__ == '__main__':
     main()

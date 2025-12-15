@@ -1,6 +1,8 @@
 from __future__ import annotations
 import random as rd
 import ast
+import numpy as np
+
 
 class MarkovChain():
 
@@ -222,8 +224,8 @@ class MarkovChain():
         return res
     
 
-    def get_initial_states_MC(self, end_state):
-        guaranteed_states=[end_state]
+    def get_initial_states_MC(self, end_states):
+        guaranteed_states=end_states
         unknown_states=[]
 
         guaranteed_copy=guaranteed_states.copy()
@@ -243,9 +245,31 @@ class MarkovChain():
             guaranteed_copy=list(set(guaranteed_copy))
             unknown_copy=list(set(unknown_copy))
             is_changed= len(guaranteed_copy)!=len(guaranteed_states) or len(unknown_copy)!=len(unknown_states)
-        return guaranteed_states, unknown_states
+        return guaranteed_states, unknown_states, [s for s in self.states if s not in guaranteed_states and s not in unknown_states]
     
+
+    def get_indices(self, l):
+        return [self.states.index(s) for s in l]
+
+    def compute_accessibility_prob_MC(self, end_states):
+        guaranteed_states, unknown_states, forbidden_states=self.get_initial_states_MC(end_states)
+        guaranteed_indices, unknown_indices, forbidden_indices=sorted(self.get_indices(guaranteed_states)), sorted(self.get_indices(unknown_states)), sorted(self.get_indices(forbidden_states))
+        sum_val_l=[sum(self.chain[""][i]) for i in range(self.n)]
+        unknown_mat=np.array([[self.chain[""][i][j]/sum_val_l[i] for j in unknown_indices] for i in unknown_indices])
+        win_vect=np.zeros(len(unknown_states))
+        for i in unknown_indices:
+            win_vect[i]=sum([self.chain[""][i][j] for j in guaranteed_indices]) /sum_val_l[i]
+        probs_unknown=np.linalg.solve(np.identity(len(unknown_states))-unknown_mat, win_vect)
+        res=[0 for i in range(self.n)]
+        for i in guaranteed_indices:
+            res[i]=1
+        for j in unknown_indices:
+            res[j]=probs_unknown[unknown_indices.index(j)]
+        return res
+
+
     
+
         
 
 
