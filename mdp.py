@@ -37,7 +37,11 @@ class gramPrintListener(gramListener):
         dep = ids.pop(0)
         act = ids.pop(0)
         weights = [int(str(x)) for x in ctx.INT()]
-        self.trans[act] = [(dep, ids[i], weights[i]) for i in range(len(ids))]
+        if act in self.trans.keys():
+            self.trans[act] += [(dep, ids[i], weights[i]) for i in range(len(ids))]
+        else:
+
+            self.trans[act] = [(dep, ids[i], weights[i]) for i in range(len(ids))]
         print("Transition from " + dep + " with action "+ act + " and targets " + str(ids) + " with weights " + str(weights))
 
     def enterTransnoact(self, ctx):

@@ -235,12 +235,17 @@ class MarkovChain():
             for s in guaranteed_states+unknown_states:
                 for s2 in self.get_previous_states_MC(s):
                     if s2 not in guaranteed_states:
-                        if self.chain[""][s2][s]==1.0:
+                        i,j=self.states.index(s), self.states.index(s2)
+                        if self.chain[""][j][i]==1.0 and s in guaranteed_states:
                             guaranteed_copy.append(s2)
                         else:
                             unknown_copy.append(s2)
-            is_changed= len(guaranteed_copy)!=len(guaranteed_states) or len(unknown_copy)!=unknown_states
+            guaranteed_copy=list(set(guaranteed_copy))
+            unknown_copy=list(set(unknown_copy))
+            is_changed= len(guaranteed_copy)!=len(guaranteed_states) or len(unknown_copy)!=len(unknown_states)
         return guaranteed_states, unknown_states
+    
+    
         
 
 
