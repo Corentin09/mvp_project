@@ -2,6 +2,7 @@ from __future__ import annotations
 import random as rd
 import ast
 import numpy as np
+from scipy.optimize import linprog
 
 
 class MarkovChain():
@@ -504,9 +505,48 @@ class MarkovChain():
     def compute_accessibility_prob_iterative_MDP(self, n_iter, end_states):
         # TODO complete
         pass
-    def compute_accessibility_prob_MDP(self, end_states):
-        # TODO complete
+
+
+    def get_initial_states_MDP(self, end_states):
+        #TODO complete cf pdf livre rouge p.859
         pass
+
+    def compute_accessibility_prob_MDP(self, end_states, minmax):
+        guaranteed_states, unknown_states, forbidden_states=self.get_initial_states_MDP(end_states)
+        guaranteed_indices, unknown_indices, forbidden_indices=sorted(self.get_indices(guaranteed_states)), sorted(self.get_indices(unknown_states)), sorted(self.get_indices(forbidden_states))
+        n_unknown=len(unknown_indices)
+        sum_val_l=[sum(self.chain[""][i]) for i in range(self.n)]
+        ineq_mat=np.zeros((n_unknown*len(self.actions), n_unknown))
+        ineq_vect=np.zeros(n_unknown*len(self.actions))
+
+
+        #computing matrix and vector to solve Ax>=b(or Ax<=b)
+        for i in range(n_unknown):# origin sate
+            for j in range(len(self.actions)):#chosen action
+                line_num=i*n_unknown+j
+                for k in range(n_unknown):#destination state
+                    
+                    if k==i:
+                        ineq_mat[line_num, k]=1-self.chain[self.actions[j]][i][i]/sum_val_l[i]
+                    else:
+                        ineq_mat[line_num, k]=self.chain[self.actions[j]][i][k]/sum_val_l[i]
+                ineq_vect[line_num]=sum([self.chain[self.actions[j]][i][k] for k in guaranteed_indices])/sum_val_l[i]
+
+        bounds=[[0,1] for i in range(n_unknown)]
+        c=[1 for i in range(n_unknown) ]
+        #minmax is respectively -1 or +1 to ensure the inequality is the right way
+        ineq_mat=minmax*ineq_mat
+        ineq_vect=minmax*ineq_vect
+
+
+        probs_unknown=linprog(c=c, A_ub=ineq_mat, b_ub=ineq_vect, bounds=bounds)
+
+        res=[0 for i in range(self.n)]
+        for i in guaranteed_indices:
+            res[i]=1
+        for j in unknown_indices:
+            res[j]=probs_unknown[unknown_indices.index(j)]
+        return res#TODO test this function
 
     
 
