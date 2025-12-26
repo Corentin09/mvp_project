@@ -7,8 +7,35 @@ import numpy as np
 class MarkovChain():
 
     def __init__(self, list_states: list[str], list_rewards: list[int]|None = None,  list_actions: list[str] | None = None, dict_trans: dict[str, list[tuple[str,str,int]]] | None = None):
-        """ Creates a Markov chain or decision process from a list of states, a list of actions, and a dictionnary of transactions grouped by action"""
-        
+        """Initialize a Markov chain or Markov decision process.
+
+        Parameters
+        ----------
+        list_states : list of str
+            Ordered list of state names used by the chain.
+        list_rewards : list of int or None, optional
+            Rewards associated to each state (same length as list_states). If None,
+            no rewards are used. (default: None)
+        list_actions : list of str or None, optional
+            List of actions available in the decision process. If provided, actions
+            not present in dict_trans are removed. The empty string "" is always
+            added to represent the default (no-action) transition matrix.
+            (default: None)
+        dict_trans : dict or None, optional
+            Mapping from action name to a list of transitions. Each transition is
+            a tuple (start_state, end_state, weight). The function expects an entry
+            for each action in self.actions. (default: None)
+
+        Raises
+        ------
+        Exception
+            If list_rewards is provided and its length does not match list_states.
+
+        Notes
+        -----
+        The transition matrices are stored in self.chain as nested lists where
+        self.chain[action][start_index][end_index] == weight.
+        """
         self.n = len(list_states)
         self.states = list_states
 
@@ -48,7 +75,17 @@ class MarkovChain():
 
 
     def __repr__(self) -> str:
-        """prints out the markov chain/process"""
+        """Return printable representation of the chain.
+
+        The representation includes states, actions, optional reward mapping and
+        the transition matrices for every action. Side-effect: prints the same
+        lines to stdout.
+
+        Returns
+        -------
+        str
+            Multi-line string summarizing the chain.
+        """
         res=f""
         res+= f"States: {self.states}\n"
         print(f"States: {self.states}")
@@ -64,8 +101,24 @@ class MarkovChain():
 
 
 
-    def get_possible_actions(self, state):
-        """Gets all valid actions from a certain state"""
+    def get_possible_actions(self, state: str):
+        """Check whether a string represents a non-empty list of valid states.
+
+        The function attempts to parse `input_str` using ast.literal_eval and
+        validates that the result is a list of strings, and that each string is
+        a known state in this Markov model.
+
+        Parameters
+        ----------
+        input_str : str
+            String to validate (expected to represent a Python list, e.g. "['s1', 's2']").
+
+        Returns
+        -------
+        bool
+            True if `input_str` represents a non-empty list of valid state names,
+            False otherwise.
+        """
         res=[]
         i = self.states.index(state)
         for a in self.chain:
@@ -79,7 +132,24 @@ class MarkovChain():
     
     
     def check_input_is_state_list(self, input_str: str)->bool:
-        """Checks if the input_str is a valid node list coherent with the current MPD"""
+        """Check that the controller rule ending can legally perform the action.
+
+        The function checks if the last state in `condition_input` has at least
+        one outgoing transition under the action specified by `state_input`.
+
+        Parameters
+        ----------
+        state_input : str
+            Action as a string (literal eval may be used by callers).
+        condition_input : list of str
+            Sequence of states forming the condition; only the last entry is used.
+
+        Returns
+        -------
+        bool
+            True if the last state in `condition_input` has at least one
+            positive-weight outgoing transition under `state_input`; False otherwise.
+        """
         try:
             p=ast.literal_eval(input_str)
             return isinstance(p, list) and all(isinstance(x, str) for x in p) and len(p)>0 and all( x in self.states for x in p)
@@ -96,7 +166,17 @@ class MarkovChain():
         return False
 
     def ask_for_controller(self)->dict[list[str], str]:
-        """Asks for a controller that is coherent with the current MPD, to be provided through the terminal"""
+        """Interactively ask the user for a controller mapping.
+
+        The controller is provided through the terminal; each rule is a
+        condition (a list of states) mapped to a chosen action. Validation is
+        performed to ensure conditions and actions are compatible with the MDP.
+
+        Returns
+        -------
+        dict
+            A mapping from conditions (as lists) to chosen actions (strings).
+        """
         n_règles=input("Combien de règles")
         while not n_règles.isnumeric():
             n_règles = input("rendre un nombre entier svp")
@@ -118,7 +198,24 @@ class MarkovChain():
 
 
     def get_action_from_controller(self, chemin, controller):
-        """Looks for the action chosen by the controller by matching the end of the path taken to the sections stored"""
+        """Get action from controller by matching path suffix.
+
+        Searches the controller for the longest rule that matches a suffix of the
+        taken path `chemin`. Returns the action associated with the first matching
+        suffix starting from the end.
+
+        Parameters
+        ----------
+        chemin : list of str
+            Path (sequence of states) taken so far.
+        controller : dict
+            Mapping from conditions (represented in the controller) to actions.
+
+        Returns
+        -------
+        str or None
+            Action selected by the controller if a match is found; otherwise None.
+        """
         for i in range(len(chemin)-1, -1, -1):
             if chemin[-i:] in controller:
                 return controller[chemin[-i:]]
@@ -127,7 +224,26 @@ class MarkovChain():
 
 
     def simulation_MC(self, n_transitions: int):
-        """goes through the markov chain  for n_transitions, logs then returns its path and its probability"""
+        """Simulate the Markov chain for a fixed number of transitions.
+
+        The simulation always starts at the first state in self.states and uses
+        the default ('') transition matrix.
+
+        Parameters
+        ----------
+        n_transitions : int
+            Number of transitions to perform.
+
+        Returns
+        -------
+        tuple
+            If rewards are defined: (chemin, tot_prob, tot_reward) where `chemin`
+            is the list of visited states (including initial), `tot_prob` is the
+            product of the chosen transition probabilities (scaled by /10 in the
+            implementation), and `tot_reward` is the sum of rewards collected
+            before each transition.
+            If no rewards: (chemin, tot_prob, None).
+        """
         chemin=[self.states[0]]
         tot_prob=1.0
         tot_reward=0
@@ -145,8 +261,28 @@ class MarkovChain():
         return chemin, tot_prob, None
     
     def simulation_MDP(self, n_transitions: int, controller: dict[list[str], str]|None = None):
-        """ goes through the markov decision process for n_transitions, either making random decisions or asking the user for a controller,
-            logs then returns its path and its probability, and the choices made"""
+        """Simulate an MDP with either random or controller-driven choices.
+
+        The function asks interactively whether to perform random decisions or
+        use a controller. When controller mode is selected but no controller is
+        passed, it will prompt the user to provide one.
+
+        Parameters
+        ----------
+        n_transitions : int
+            Number of transitions to perform.
+        controller : dict or None, optional
+            Controller mapping used when the controller-driven mode is selected.
+            (default: None)
+
+        Returns
+        -------
+        (chemin, choices, proba, tot_reward)
+            chemin : list of str -- visited states (including initial)
+            choices : list of str -- actions chosen at each step
+            proba : float -- product of probabilities (scaled by /10 in code)
+            tot_reward : int or None -- accumulated reward if rewards are defined
+        """
         chosen_method=input(f"Do you want a random choice (answer 1) \n a given controller(answer 2)")
         if int(chosen_method) not in [1,2]:
             chosen_method=input(f"Please choose between 1 and 2")
@@ -162,8 +298,24 @@ class MarkovChain():
 
 
     def simulation_MDP_random(self, n_transitions: int):
-        """ goes through the markov decision process for n_transitions making random decisions, 
-            logs then returns its path and its probability, and the choices made"""
+        """Simulate an MDP using random action selection.
+
+        Starting from the first state, at each step a random valid action is
+        chosen uniformly from the set of possible actions and then a next state
+        is sampled according to that action's transition probabilities.
+
+        Parameters
+        ----------
+        n_transitions : int
+            Number of transitions to perform.
+
+        Returns
+        -------
+        tuple
+            (chemin, choices, tot_prob, tot_reward) where `choices` lists the
+            randomly chosen actions and other elements match simulation_MC
+            semantics.
+        """
         chemin=[self.states[0]]
         choices=[]
         tot_prob=1.0
@@ -186,8 +338,25 @@ class MarkovChain():
     
 
     def simulation_MDP_controller(self, n_transitions:int, controller: dict[list[str], str]|None):
-        """ goes through the markov decision process for n_transitions with a controller,
-            logs then returns its path and its probability, and the choices made"""
+        """Simulate an MDP using a provided controller.
+
+        At each step the action is selected by querying the controller with the
+        current path (using get_action_from_controller), and the next state is
+        sampled according to that action's transition probabilities.
+
+        Parameters
+        ----------
+        n_transitions : int
+            Number of transitions to perform.
+        controller : dict
+            Controller mapping conditions to actions.
+
+        Returns
+        -------
+        tuple
+            (chemin, choices, tot_prob, tot_reward) mirroring other simulation
+            methods.
+        """
         chemin=[self.states[0]]
         choices=[]
         tot_prob=1.0
@@ -214,17 +383,53 @@ class MarkovChain():
 
 
     def check_MC(self):
+        """Check whether the model represents a plain Markov chain (no actions).
+
+        Returns
+        -------
+        bool
+            True iff only the default action "" is present.
+        """
         if self.actions!=[''] or len(self.chain.keys())>1:
             return False
         return True
 
     def get_previous_states_MC(self, state):
+        """Return states with positive transition probability to `state`.
+
+        Parameters
+        ----------
+        state : str
+            Target state.
+
+        Returns
+        -------
+        list of str
+            States that have a positive-weight transition to `state` under the
+            default action.
+        """
         i = self.states.index(state)
         res=[self.states[j] for j in range(self.n) if self.chain[''][j][i]>0]
         return res
     
 
     def get_initial_states_MC(self, end_states):
+        """Classify states as guaranteed, unknown or forbidden with respect to reachability.
+
+        This iteratively propagates backward reachability to determine states that
+        are guaranteed to reach `end_states`, those that may reach them (unknown),
+        and the remainder which cannot reach them.
+
+        Parameters
+        ----------
+        end_states : list of str
+            Target states considered as successful terminal states.
+
+        Returns
+        -------
+        tuple
+            (guaranteed_states, unknown_states, remaining_states)
+        """
         guaranteed_states=end_states
         unknown_states=[]
 
@@ -249,9 +454,38 @@ class MarkovChain():
     
 
     def get_indices(self, l):
+        """Return indices of a list of states in the internal states list.
+
+        Parameters
+        ----------
+        l : list of str
+            State names.
+
+        Returns
+        -------
+        list of int
+            Indices corresponding to the provided states.
+        """
         return [self.states.index(s) for s in l]
 
     def compute_accessibility_prob_linear_MC(self, end_states):
+        """Compute reachability probabilities in an MC by solving linear equations.
+
+        For states that are not trivially guaranteed or forbidden, the method
+        sets up linear equations on the unknown states and solves them to get
+        the probability of eventually reaching any of `end_states`.
+
+        Parameters
+        ----------
+        end_states : list of str
+            Target states considered successful.
+
+        Returns
+        -------
+        list of float
+            Probability for each state (in order of self.states) to reach any
+            of the `end_states`.
+        """
         guaranteed_states, unknown_states, forbidden_states=self.get_initial_states_MC(end_states)
         guaranteed_indices, unknown_indices, forbidden_indices=sorted(self.get_indices(guaranteed_states)), sorted(self.get_indices(unknown_states)), sorted(self.get_indices(forbidden_states))
         sum_val_l=[sum(self.chain[""][i]) for i in range(self.n)]
@@ -277,6 +511,34 @@ class MarkovChain():
     
 
     def SMC_quantitatif(self, end_states, n_limit, delta, epsilon):
+        """Estimate reachability probability via statistical model checking (quantitative).
+
+        Only valid for plain Markov chains (no actions). Uses a fixed number of
+        simulations derived from the Chernoff bound.
+
+        Parameters
+        ----------
+        end_states : list of str
+            Target states considered successful.
+        n_limit : int
+            Number of transitions per simulation.
+        delta : float
+            Confidence parameter (probability of failure).
+        epsilon : float
+            Desired additive precision.
+
+        Returns
+        -------
+        tuple
+            (estimated_probability, n_simul) where `estimated_probability` is the
+            fraction of runs that hit any of `end_states` within `n_limit`
+            transitions, and `n_simul` is the number of simulated trajectories.
+
+        Raises
+        ------
+        Exception
+            If the model is not a Markov chain (i.e. contains actions).
+        """
         if not self.check_MC():
             raise Exception("SMC only with MC")
         n_succ=0
@@ -290,6 +552,40 @@ class MarkovChain():
         return n_succ/n_simul, n_simul
     
     def SMC_qualitatif(self, end_states, n_limit, alpha, beta, theta, epsilon):
+        """Perform sequential hypothesis testing for qualitative SMC.
+
+        Uses a sequential probability ratio test (SPRT) to decide whether the
+        probability of reaching `end_states` within `n_limit` transitions is
+        >= theta+epsilon (accept) or <= theta-epsilon (reject) with prescribed
+        error bounds alpha and beta.
+
+        Parameters
+        ----------
+        end_states : list of str
+            Target states considered successful.
+        n_limit : int
+            Number of transitions per simulation.
+        alpha : float
+            Type I error rate.
+        beta : float
+            Type II error rate.
+        theta : float
+            Threshold probability.
+        epsilon : float
+            Indifference region width.
+
+        Returns
+        -------
+        tuple
+            (decision, m) where `decision` is True when the test decides in
+            favour of probability <= theta-epsilon (accept H0), False otherwise,
+            and `m` is the number of samples taken.
+
+        Raises
+        ------
+        Exception
+            If the model is not a Markov chain.
+        """
         if not self.check_MC():
             raise Exception("SMC only with MC")
         rm=0
