@@ -506,10 +506,68 @@ class MarkovChain():
         # TODO complete
         pass
 
+    
+    def get_initial_states_MDP(self, end_states: list[str]):
+    """Classify states as guaranteed, unknown, or forbidden with respect to reachability in an MDP.
 
-    def get_initial_states_MDP(self, end_states):
-        #TODO complete cf pdf livre rouge p.859
-        pass
+    This iteratively propagates backward reachability to determine states that
+    are guaranteed to reach `end_states`, those that may reach them (unknown),
+    and the remainder which cannot reach them.
+
+    Parameters
+    ----------
+    end_states : list of str
+        Target states considered as successful terminal states.
+
+    Returns
+    -------
+    tuple
+        (guaranteed_states, unknown_states, forbidden_states)
+    """
+    guaranteed_states = end_states.copy()
+    unknown_states = []
+    forbidden_states = []
+
+    guaranteed_copy = guaranteed_states.copy()
+    unknown_copy = unknown_states.copy()
+    is_changed = True
+
+    while is_changed:
+        guaranteed_states = guaranteed_copy.copy()
+        unknown_states = unknown_copy.copy()
+        is_changed = False
+
+        for state in self.states:
+            if state in guaranteed_states or state in unknown_states:
+                continue
+
+            # Check if there exists an action that guarantees reaching an end_state
+            guaranteed = False
+            possible = False
+
+            for action in self.actions:
+                for i in range(self.n):
+                    if self.chain[action][self.states.index(state)][i] > 0:
+                        next_state = self.states[i]
+                        if next_state in guaranteed_states:
+                            guaranteed = True
+                        elif next_state in unknown_states:
+                            possible = True
+
+            if guaranteed:
+                guaranteed_copy.append(state)
+                is_changed = True
+            elif possible:
+                unknown_copy.append(state)
+                is_changed = True
+
+        guaranteed_copy = list(set(guaranteed_copy))
+        unknown_copy = list(set(unknown_copy))
+
+    forbidden_states = [s for s in self.states if s not in guaranteed_copy and s not in unknown_copy]
+
+    return guaranteed_copy, unknown_copy, forbidden_states#TODO test this function
+
 
     def compute_accessibility_prob_MDP(self, end_states, minmax):
         guaranteed_states, unknown_states, forbidden_states=self.get_initial_states_MDP(end_states)
