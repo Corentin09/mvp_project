@@ -506,31 +506,160 @@ class MarkovChain():
         # TODO complete
         pass
 
+    
+    def get_initial_states_MDP(self, end_states: list[str], max: int = 1):
+        """
+        Classify states as guaranteed, unknown, or forbidden with respect to reachability in an MDP.
 
-    def get_initial_states_MDP(self, end_states):
-        #TODO complete cf pdf livre rouge p.859
-        pass
+        This iteratively propagates backward reachability to determine states that
+        are guaranteed to reach `end_states`, those that may reach them (unknown),
+        and the remainder which cannot reach them. The `max` parameter determines
+        whether to consider the best (max=True) or worst (max=False) choices at each state.
 
-    def compute_accessibility_prob_MDP(self, end_states, minmax):
-        guaranteed_states, unknown_states, forbidden_states=self.get_initial_states_MDP(end_states)
+        Parameters
+        ----------
+        end_states : list of str
+            Target states considered as successful terminal states.
+        max : bool, optional
+            If True, consider the best choices (maximizing reachability).
+            If False, consider the worst choices (minimizing reachability).
+            Default is True.
+
+        Returns
+        -------
+        tuple
+            (guaranteed_states, unknown_states, forbidden_states)
+        """
+        guaranteed_states = set(end_states)
+        unknown_states = set()
+        forbidden_states = set(self.states) - guaranteed_states
+
+        changed = True
+        while changed:
+            changed = False
+            new_guaranteed = set()
+            new_unknown = set()
+
+            for state in self.states:
+                if state in guaranteed_states or state in unknown_states:
+                    continue
+
+                guaranteed = False
+                possible = False
+
+                for action in self.actions:
+                    # Check all possible next states for the current action
+                    for j in range(self.n):
+                        if self.chain[action][self.states.index(state)][j] > 0:
+                            next_state = self.states[j]
+                            if next_state in guaranteed_states:
+                                if max==1:
+                                    guaranteed = True
+                                    break
+                                else:
+                                    possible = True
+                            elif next_state in unknown_states:
+                                possible = True
+
+                    if max==1 and guaranteed:
+                        break
+                    if max==-1 and possible:
+                        break
+
+                if guaranteed:
+                    new_guaranteed.add(state)
+                elif possible:
+                    new_unknown.add(state)
+
+            if new_guaranteed:
+                changed = True
+                guaranteed_states.update(new_guaranteed)
+                forbidden_states -= new_guaranteed
+            if new_unknown:
+                changed = True
+                unknown_states.update(new_unknown)
+                forbidden_states -= new_unknown
+
+        return list(guaranteed_states), list(unknown_states), list(forbidden_states)
+
+
+
+    def compute_accessibility_prob_MDP(self, end_states, minmax: int=1):
+        """
+        Compute reachability probabilities in an MDP by linear programming.
+
+        Parameters
+        ----------
+        end_states : list of str
+            Target states considered successful.
+        minmax : int, optional
+            +1 (default) to compute the maximum probability of reaching
+            `end_states` under an optimal controller; -1 to compute the
+            minimum probability (adversarial controller).
+
+        Returns
+        -------
+        list of float
+            A list of length `self.n` giving, for each state in `self.states`,
+            the probability (in [0, 1]) of eventually reaching any of `end_states`.
+            States classified as guaranteed return 1.0, forbidden return 0.0,
+            unknown states are obtained by solving the linear program.
+
+        Raises
+        ------
+        Exception
+            If the linear program fails (scipy.optimize.linprog reports an
+            unsuccessful solution) or if internal numerical problems occur.
+
+        Notes
+        -----
+        The algorithm proceeds in two steps:
+        1. Classify states as guaranteed / unknown / forbidden using
+           `get_initial_states_MDP`.
+        2. For unknown states, build linear inequalities for every state-action
+           pair that express reachable mass between unknown states and the
+           guaranteed set (normalising per-state action weights). The
+           inequalities are arranged and flipped according to `minmax` and
+           solved with `scipy.optimize.linprog` to obtain probabilities for
+           unknown states.
+
+        Examples
+        --------
+        >>> mc.compute_accessibility_prob_MDP(['S_goal'], +1)
+        [1.0, 0.0, 0.37, 0.89]
+        """
+        guaranteed_states, unknown_states, forbidden_states=self.get_initial_states_MDP(end_states, minmax)
         guaranteed_indices, unknown_indices, forbidden_indices=sorted(self.get_indices(guaranteed_states)), sorted(self.get_indices(unknown_states)), sorted(self.get_indices(forbidden_states))
         n_unknown=len(unknown_indices)
-        sum_val_l=[sum(self.chain[""][i]) for i in range(self.n)]
+        if n_unknown==0:
+            res=[0 for i in range(self.n)]
+            for i in guaranteed_indices:
+                res[i]=1
+            return res
         ineq_mat=np.zeros((n_unknown*len(self.actions), n_unknown))
         ineq_vect=np.zeros(n_unknown*len(self.actions))
 
 
         #computing matrix and vector to solve Ax>=b(or Ax<=b)
-        for i in range(n_unknown):# origin sate
+        for i in range(n_unknown):# origin state
             for j in range(len(self.actions)):#chosen action
-                line_num=i*n_unknown+j
+
+                total=sum(self.chain[self.actions[j]][unknown_indices[i]])
+
+                #checks to avoid division by 0
+                if total==0:
+                    total=1
+
+
+                line_num=i*len(self.actions)+j
                 for k in range(n_unknown):#destination state
                     
                     if k==i:
-                        ineq_mat[line_num, k]=1-self.chain[self.actions[j]][i][i]/sum_val_l[i]
+                        
+                        ineq_mat[line_num, k]=1-self.chain[self.actions[j]][unknown_indices[i]][unknown_indices[k]]/total
                     else:
-                        ineq_mat[line_num, k]=self.chain[self.actions[j]][i][k]/sum_val_l[i]
-                ineq_vect[line_num]=sum([self.chain[self.actions[j]][i][k] for k in guaranteed_indices])/sum_val_l[i]
+                        ineq_mat[line_num, k]=-self.chain[self.actions[j]][unknown_indices[i]][unknown_indices[k]]/total
+                ineq_vect[line_num]=sum([self.chain[self.actions[j]][unknown_indices[i]][k] for k in guaranteed_indices])/total
 
         bounds=[[0,1] for i in range(n_unknown)]
         c=[1 for i in range(n_unknown) ]
@@ -545,7 +674,7 @@ class MarkovChain():
         for i in guaranteed_indices:
             res[i]=1
         for j in unknown_indices:
-            res[j]=probs_unknown[unknown_indices.index(j)]
+            res[j]=probs_unknown.x[unknown_indices.index(j)]
         return res#TODO test this function
 
     
