@@ -3,6 +3,7 @@ from gramLexer import gramLexer
 from gramListener import gramListener
 from gramParser import gramParser
 from markov import MarkovChain
+from interface import Interface
 import sys
 
 
@@ -50,19 +51,18 @@ class gramPrintListener(gramListener):
 
 
 def main():
-    input_file=sys.argv[1]
-    lexer = gramLexer(FileStream(input_file, encoding='utf-8'))
+    lexer = gramLexer(StdinStream())
     stream = CommonTokenStream(lexer)
     parser = gramParser(stream)
     tree = parser.program()
     printer = gramPrintListener()
     walker = ParseTreeWalker()
     walker.walk(printer, tree)
-    markov=MarkovChain(list_states=printer.states, list_actions= printer.actions, list_rewards= printer.rewards, dict_trans=printer.trans)
-    markov.__repr__()
-    print(markov.chain)
-    a,b,c,d=markov.simulation_MDP(10)
-    print(a,b,c,d)
+    
+    markov = MarkovChain(printer.states, printer.actions, printer.trans)
+    interface = Interface(markov)
+    history = interface.execute()
+    print(history)
 
 if __name__ == '__main__':
     main()

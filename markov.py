@@ -1,5 +1,7 @@
 from __future__ import annotations
 import random as rd
+import graphviz
+from interface import Interface
 import ast
 
 class MarkovChain():
@@ -203,7 +205,52 @@ class MarkovChain():
             return chemin, choices, tot_prob, tot_reward
         return chemin, choices, tot_prob, None
     
+    def show_graph(self):
 
+        dot = graphviz.Digraph(format="png")
+        dot.attr(rankdir="LR")
+
+        list_node = []
+        list_edge = []
+
+        for s in self.states:
+            if s == self.current_state:
+                dot.node(s, style="filled", fillcolor="yellow")
+            else:
+                dot.node(s, style="filled", fillcolor="lightblue")
+
+            list_node.append(s)
+
+        for a in self.actions:
+            for i, origin_state in enumerate(self.states):
+                for j, destination_state in enumerate(self.states):
+                    rate = self.chain[a][i][j]
+                    if rate > 0:
+                        if a != "":
+                            action_node = f"{origin_state}_{a}"
+                            edge_a = (origin_state, action_node)
+                            edge_dest = (action_node, destination_state)
+                            if edge_a not in list_edge:
+                                dot.node(action_node, label="", shape="point", width="0.05", height="0.05", fillcolor="black", style="filled")
+                                dot.edge(origin_state, action_node, label=f"{a}")
+                                list_edge.append(edge_a)
+
+                            dot.edge(action_node, destination_state, label=f"{rate}")
+                            list_edge.append(edge_dest)
+                        else:
+                            dot.edge(origin_state, destination_state, label=f"{rate}")
+
+        output_file = "./mdp"
+        dot.render(output_file, cleanup=True)
+        return output_file + ".png"
+    
+    def next_state(self, a):
+        if a == "Next State":
+            a = ""
+        probs = self.chain[a][self.states.index(self.current_state)]
+        new_state = rd.choices(self.states, weights=probs)[0]
+        self.current_state = new_state
+        print(probs)
 
     def get_initial_states(self, end_state):
         guaranteed_states=[end_state]
