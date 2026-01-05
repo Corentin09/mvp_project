@@ -42,6 +42,24 @@ class MarkovChain():
         self.states = list_states
         self.current_state = self.states[0]
 
+        if len(dict_trans.keys()) > 1 and "" in dict_trans.keys():
+            raise Exception("The model has transition with and without actions")
+
+        for a in dict_trans.keys():
+            if a not in list_actions and a!="":
+                raise Exception(f"The action {a} is not defined")
+            
+        for trans in dict_trans.values():
+            for list_s in trans:
+                for s in list_s:
+                    if isinstance(s, str) and s not in self.states:
+                        print(isinstance(s, str), s not in self.states)
+                        raise Exception(f"The state {s} is not defined")
+                    
+            
+            
+        
+
         # Building the list of actions used
         if list_actions:
             for a in list_actions:
@@ -501,7 +519,7 @@ class MarkovChain():
         print(win_vect)
         for i, idx in enumerate(unknown_indices):
             print(i)
-            win_vect[i]=sum([self.chain[""][i][j] for j in guaranteed_indices]) /sum_val_l[i]
+            win_vect[i]=sum([self.chain[""][unknown_indices[i]][j] for j in guaranteed_indices]) /sum_val_l[i]
         probs_unknown=np.linalg.solve(np.identity(len(unknown_states))-unknown_mat, win_vect)
         res=[0 for i in range(self.n)]
         for i in guaranteed_indices:
@@ -535,110 +553,190 @@ class MarkovChain():
         return set(res)
 
 
-    def get_initial_states_MDP(self, end_states):
+    def get_initial_states_MDP(self, end_states: list[str], max: int = 1):
+        """
+        Classify states as guaranteed, unknown, or forbidden with respect to reachability in an MDP.
 
-        guaranteed_states=end_states
-        unknown_states=[]
+        This iteratively propagates backward reachability to determine states that
+        are guaranteed to reach `end_states`, those that may reach them (unknown),
+        and the remainder which cannot reach them. The `max` parameter determines
+        whether to consider the best (max=True) or worst (max=False) choices at each state.
 
-        guaranteed_copy=guaranteed_states.copy()
-        unknown_copy=unknown_states.copy()
-        is_changed=True
+        Parameters
+        ----------
+        end_states : list of str
+            Target states considered as successful terminal states.
+        max : int, optional
+            If 1, consider the best choices (maximizing reachability).
+            If -1, consider the worst choices (minimizing reachability).
+            Default is True.
 
-        while is_changed:
-            guaranteed_states=guaranteed_copy.copy()
-            unknown_states=unknown_copy.copy()
+        Returns
+        -------
+        tuple
+            (guaranteed_states, unknown_states, forbidden_states)
+        """
+        guaranteed_states = set(end_states)
+        unknown_states = set()
+        forbidden_states = set(self.states) - guaranteed_states
 
-            for s in guaranteed_states+unknown_states:
-                for s2 in self.get_previous_states_MDP(s):
-                    if s2 not in guaranteed_states:
-                        i,j=self.states.index(s), self.states.index(s2)
-                        list_actions = self.get_possible_actions(s)
-                        garanteed = False
+        changed = True
+        while changed:
+            changed = False
+            new_guaranteed = set()
+            new_unknown = set()
 
-                        for a in list_actions:
-                            if self.chain[a][j][i] == 10 and s in guaranteed_states:
-                                garanteed = True
+            for state in self.states:
+                if state in guaranteed_states or state in unknown_states:
+                    continue
 
-                        if garanteed:
-                            guaranteed_copy.append(s2)
-                        else:
-                            unknown_copy.append(s2)
+                all_guaranteed = True
+                all_possible = True
 
-            guaranteed_copy=list(set(guaranteed_copy))
-            unknown_copy=list(set(unknown_copy))
-            is_changed= len(guaranteed_copy)!=len(guaranteed_states) or len(unknown_copy)!=len(unknown_states)
-        return guaranteed_states, unknown_states, [s for s in self.states if s not in guaranteed_states and s not in unknown_states]
-# x1 - 0.5x2 -0.5x3 <= 0
-# x1 <= 1
-# x2 = 0
-# x3 = 1
-# x1 = 0.5, x2= 0 x3 = 1
-# x1 -0.5x2 -0.5x3 <= 0
-# x1 <= 1
-# x2 -x3 <= 0
+                for action in self.actions:
+                    active_action=False
+                    guaranteed_action=True
+                    possible_action=False
+                    # Check all possible next states for the current action
+                    for j in range(self.n):
+                        if self.chain[action][self.states.index(state)][j] > 0:
+                            active_action=True
+                            next_state = self.states[j]
+                            
+                            if next_state in guaranteed_states:
+                                possible_action = True
+                            elif next_state in unknown_states:
+                                possible_action = True
+                                guaranteed_action=False
+                            else:
+                                guaranteed_action=False
+                    if active_action:
+                        if max==1 and guaranteed_action:
+                            new_guaranteed.add(state)
+                            break
+                        elif max==1 and possible_action:
+                            new_unknown.add(state)
+                            break
 
-# 0.3x3 <= 0.3
+                        if max==-1 and not(possible_action):
+                            all_possible=False
+                        if max==-1 and not(guaranteed_action):
+                            all_guaranteed=False
+                    
+
+                if max==-1:
+                    if all_guaranteed:
+                        new_guaranteed.add(state)
+                    elif all_possible:
+                        new_unknown.add(state)
+
+            if new_guaranteed:
+                changed = True
+                guaranteed_states.update(new_guaranteed)
+                forbidden_states -= new_guaranteed
+            if new_unknown:
+                changed = True
+                unknown_states.update(new_unknown)
+                forbidden_states -= new_unknown
+
+        return list(guaranteed_states), list(unknown_states), list(forbidden_states)
 
 
-    def compute_accessibility_prob_MDP(self, end_states, minmax):
-        guaranteed_states, unknown_states, forbidden_states=self.get_initial_states_MDP(end_states)
+    def compute_accessibility_prob_MDP(self, end_states, minmax: int=1):
+        """
+        Compute reachability probabilities in an MDP by linear programming.
+
+        Parameters
+        ----------
+        end_states : list of str
+            Target states considered successful.
+        minmax : int, optional
+            +1 (default) to compute the maximum probability of reaching
+            `end_states` under an optimal controller; -1 to compute the
+            minimum probability (adversarial controller).
+
+        Returns
+        -------
+        list of float
+            A list of length `self.n` giving, for each state in `self.states`,
+            the probability (in [0, 1]) of eventually reaching any of `end_states`.
+            States classified as guaranteed return 1.0, forbidden return 0.0,
+            unknown states are obtained by solving the linear program.
+
+        Raises
+        ------
+        Exception
+            If the linear program fails (scipy.optimize.linprog reports an
+            unsuccessful solution) or if internal numerical problems occur.
+
+        Notes
+        -----
+        The algorithm proceeds in two steps:
+        1. Classify states as guaranteed / unknown / forbidden using
+           `get_initial_states_MDP`.
+        2. For unknown states, build linear inequalities for every state-action
+           pair that express reachable mass between unknown states and the
+           guaranteed set (normalising per-state action weights). The
+           inequalities are arranged and flipped according to `minmax` and
+           solved with `scipy.optimize.linprog` to obtain probabilities for
+           unknown states.
+
+        Examples
+        --------
+        >>> mc.compute_accessibility_prob_MDP(['S_goal'], +1)
+        [1.0, 0.0, 0.37, 0.89]
+        """
+        guaranteed_states, unknown_states, forbidden_states=self.get_initial_states_MDP(end_states, minmax)
         guaranteed_indices, unknown_indices, forbidden_indices=sorted(self.get_indices(guaranteed_states)), sorted(self.get_indices(unknown_states)), sorted(self.get_indices(forbidden_states))
         n_unknown=len(unknown_indices)
-        if n_unknown == 0:
+        if n_unknown==0:
             res=[0 for i in range(self.n)]
             for i in guaranteed_indices:
                 res[i]=1
             return res
-        print(n_unknown, len(self.actions))
         ineq_mat=np.zeros((n_unknown*len(self.actions), n_unknown))
         ineq_vect=np.zeros(n_unknown*len(self.actions))
 
-        ineq_mat = []
-        ineq_vect = []
-
 
         #computing matrix and vector to solve Ax>=b(or Ax<=b)
-        for i, idx in enumerate(unknown_indices):# origin state
-            for j, action in enumerate(self.actions):#chosen action
-                
-                P_action = self.chain[action][idx]
-                print(i, P_action)
-                if not [k for k in unknown_indices + guaranteed_indices if k != idx and P_action[k] > 0] :
+        for i in range(n_unknown):# origin state
+            for j in range(len(self.actions)):#chosen action
+
+                total=sum(self.chain[self.actions[j]][unknown_indices[i]])
+
+                #checks to avoid division by 0
+                if total==0:
                     continue
-                print("test", idx, action)
-                line = np.zeros(n_unknown)
-                for k, kdx in enumerate(unknown_indices):#destination state
-                    #print(i, action, k)
-                    if kdx==idx:
-                        line[k]=1 - P_action[kdx]/10
-                        print(1-P_action[k]/10)
+
+
+                line_num=i*len(self.actions)+j
+                for k in range(n_unknown):#destination state
+                    
+                    if k==i:
+                        
+                        ineq_mat[line_num, k]=-1+self.chain[self.actions[j]][unknown_indices[i]][unknown_indices[k]]/total
                     else:
-                        line[k]= -P_action[kdx]/10
-                        print(- self.chain[self.actions[j]][i][k]/10)
-                ineq_vect.append(sum([P_action[k] for k in guaranteed_indices])/10)
+                        ineq_mat[line_num, k]=self.chain[self.actions[j]][unknown_indices[i]][unknown_indices[k]]/total
+                ineq_vect[line_num]=-sum([self.chain[self.actions[j]][unknown_indices[i]][k] for k in guaranteed_indices])/total
 
-                ineq_mat.append(line)
-        ineq_mat = np.array(ineq_mat)
-        ineq_vect = np.array(ineq_vect)
         bounds=[[0,1] for i in range(n_unknown)]
-        c=[minmax for i in range(n_unknown)]
+        
         #minmax is respectively -1 or +1 to ensure the inequality is the right way
-        ineq_mat=-minmax*ineq_mat
-        ineq_vect=-minmax*ineq_vect
+        ineq_mat=minmax*ineq_mat
+        ineq_vect=minmax*ineq_vect
+        c=[minmax for i in range(n_unknown) ]
 
-        print(np.array(ineq_mat))
+        print(ineq_mat)
         print(ineq_vect)
-        print(c)
+        print(unknown_indices, guaranteed_indices, forbidden_indices)
         probs_unknown=linprog(c=c, A_ub=ineq_mat, b_ub=ineq_vect, bounds=bounds)
-        print(probs_unknown.success)
-        print(probs_unknown.x)
 
         res=[0 for i in range(self.n)]
         for i in guaranteed_indices:
             res[i]=1
-        for i, s in enumerate(unknown_indices):
-            res[s]=probs_unknown.x[i]
-        return res#TODO test this function
+        for j in unknown_indices:
+            res[j]=probs_unknown.x[unknown_indices.index(j)]
+        return res
     
 
 
@@ -805,7 +903,6 @@ class MarkovChain():
         probs = self.chain[a][self.states.index(self.current_state)]
         new_state = rd.choices(self.states, weights=probs)[0]
         self.current_state = new_state
-        print(probs)
 
 
         

@@ -107,7 +107,7 @@ class Interface:
         if self.graph.check_MC():
             self.g, self.u, self.r = self.graph.get_initial_states_MC([target])
         else:
-            self.g, self.u, self.r = self.graph.get_initial_states_MDP([target])
+            self.g, self.u, self.r = self.graph.get_initial_states_MDP([target], -1)
 
         self.update_interface()
         if self.graph.check_MC():
