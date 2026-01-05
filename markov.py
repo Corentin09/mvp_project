@@ -493,8 +493,8 @@ class MarkovChain():
         sum_val_l=[sum(self.chain[""][i]) for i in range(self.n)]
         unknown_mat=np.array([[self.chain[""][i][j]/sum_val_l[i] for j in unknown_indices] for i in unknown_indices])
         win_vect=np.zeros(len(unknown_states))
-        for i in unknown_indices:
-            win_vect[i]=sum([self.chain[""][i][j] for j in guaranteed_indices]) /sum_val_l[i]
+        for i in range(len(unknown_indices)):
+            win_vect[i]=sum([self.chain[""][unknown_indices[i]][j] for j in guaranteed_indices]) /sum_val_l[i]
         probs_unknown=np.linalg.solve(np.identity(len(unknown_states))-unknown_mat, win_vect)
         res=[0 for i in range(self.n)]
         for i in guaranteed_indices:
