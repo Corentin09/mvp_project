@@ -6,7 +6,6 @@ from markov import MarkovChain
 from interface import Interface
 import sys
 
-
 class gramPrintListener(gramListener):
 
     def __init__(self):
@@ -38,16 +37,22 @@ class gramPrintListener(gramListener):
         dep = ids.pop(0)
         act = ids.pop(0)
         weights = [int(str(x)) for x in ctx.INT()]
-        self.trans[act] = [(dep, ids[i], weights[i]) for i in range(len(ids))]
+        if act in self.trans.keys():
+            self.trans[act] += [(dep, ids[i], weights[i]) for i in range(len(ids))]
+        else:
+
+            self.trans[act] = [(dep, ids[i], weights[i]) for i in range(len(ids))]
         print("Transition from " + dep + " with action "+ act + " and targets " + str(ids) + " with weights " + str(weights))
 
     def enterTransnoact(self, ctx):
         ids = [str(x) for x in ctx.ID()]
         dep = ids.pop(0)
         weights = [int(str(x)) for x in ctx.INT()]
-        self.trans[""] = [(dep, ids[i], weights[i]) for i in range(len(ids))]
+        if "" in self.trans.keys():
+            self.trans[""] += [(dep, ids[i], weights[i]) for i in range(len(ids))]
+        else:
+            self.trans[""] = [(dep, ids[i], weights[i]) for i in range(len(ids))]
         print("Transition from " + dep + " with no action and targets " + str(ids) + " with weights " + str(weights))
-
 
 
 def main():
@@ -58,8 +63,8 @@ def main():
     printer = gramPrintListener()
     walker = ParseTreeWalker()
     walker.walk(printer, tree)
-    
-    markov = MarkovChain(printer.states, printer.actions, printer.trans)
+    markov = MarkovChain(list_states=printer.states, list_rewards=printer.rewards, list_actions=printer.actions, dict_trans=printer.trans)
+    print(markov.chain)
     interface = Interface(markov)
     history = interface.execute()
     print(history)

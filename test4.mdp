@@ -1,0 +1,3 @@
+States S0:1;
+Actions a;
+S0 -> 10:S0;
