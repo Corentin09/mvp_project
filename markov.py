@@ -504,8 +504,29 @@ class MarkovChain():
         return res
     
     def compute_accessibility_prob_iterative_MDP(self, n_iter, end_states):
-        # TODO complete
-        pass
+        guaranteed_states, unknown_states, forbidden_states=self.get_initial_states_MC(end_states)
+        guaranteed_indices, unknown_indices, forbidden_indices=sorted(self.get_indices(guaranteed_states)), sorted(self.get_indices(unknown_states)), sorted(self.get_indices(forbidden_states))
+        sum_val_l=[sum(self.chain[""][i]) for i in range(self.n)]
+        unknown_mat=np.array([[self.chain[""][i][j]/sum_val_l[i] for j in unknown_indices] for i in unknown_indices])
+        win_vect=np.zeros(len(unknown_states))
+        for i in range(len(unknown_indices)):
+            win_vect[i]=sum([self.chain[""][unknown_indices[i]][j] for j in guaranteed_indices]) /sum_val_l[i]
+        x=np.zeros(len(unknown_states))
+        for i in range(n_iter):
+            x=unknown_mat@x+win_vect
+        return x
+
+    def compute_expected_reward(self):
+        assert self.check_MC()
+        sum_val_l = [max(sum(self.chain[""][i]), 1e-10) for i in range(self.n)]  # Avoid division by zero
+        probability_mat = np.array([[self.chain[""][i][j] / sum_val_l[i] for j in range(self.n)] for i in range(self.n)])
+        rew_vect = np.array([self.rewards_dict[self.states[i]] for i in range(self.n)])
+
+        # Add small regularization to diagonal
+        epsilon = 1e-10
+        expected_rewards = np.linalg.solve(np.identity(self.n) - probability_mat + epsilon * np.identity(self.n), rew_vect)
+
+        return expected_rewards
 
     
     def get_initial_states_MDP(self, end_states: list[str], max: int = 1):

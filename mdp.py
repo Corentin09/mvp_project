@@ -70,12 +70,12 @@ def main():
     print(markov.chain)
     # a,b,c=markov.simulation_MC(10)
     # print(a,b,c)
-    chosen_end_states=['S0']
+    chosen_end_states=['S3']
     minmax=-1
-
-    print(markov.get_initial_states_MDP(chosen_end_states, max=minmax))
-    print(markov.compute_accessibility_prob_MDP(chosen_end_states, minmax=minmax))
-
+    
+    print(markov.get_initial_states_MC(chosen_end_states))
+    print(markov.compute_accessibility_prob_iterative_MDP(2,chosen_end_states))
+    print(markov.compute_expected_reward())
 
     #print(markov.SMC_qualitatif(['S5'], 5, 0.01, 0.01, 0.32, 0.02))
 
