@@ -59,18 +59,19 @@ class MarkovChain():
             self.rewards_dict=None
 
         self.chain ={a: [[0 for i in range(self.n)] for j in range(self.n)] for a in self.actions}
+
         self.chain[""]=[[0 for i in range(self.n)] for j in range(self.n)]
 
 
         for act in self.chain:
 
-            
-            trans = dict_trans[act]
-            
-            for start, end, w in trans:
-                j = self.states.index(start)
-                i = self.states.index(end)
-                self.chain[act] [j][i]= w 
+            if act in dict_trans.keys():
+                trans = dict_trans[act]
+                
+                for start, end, w in trans:
+                    j = self.states.index(start)
+                    i = self.states.index(end)
+                    self.chain[act] [j][i]= w 
 
 
 
@@ -520,9 +521,9 @@ class MarkovChain():
         ----------
         end_states : list of str
             Target states considered as successful terminal states.
-        max : bool, optional
-            If True, consider the best choices (maximizing reachability).
-            If False, consider the worst choices (minimizing reachability).
+        max : int, optional
+            If 1, consider the best choices (maximizing reachability).
+            If -1, consider the worst choices (minimizing reachability).
             Default is True.
 
         Returns
@@ -544,32 +545,45 @@ class MarkovChain():
                 if state in guaranteed_states or state in unknown_states:
                     continue
 
-                guaranteed = False
-                possible = False
+                all_guaranteed = True
+                all_possible = True
 
                 for action in self.actions:
+                    active_action=False
+                    guaranteed_action=True
+                    possible_action=False
                     # Check all possible next states for the current action
                     for j in range(self.n):
                         if self.chain[action][self.states.index(state)][j] > 0:
+                            active_action=True
                             next_state = self.states[j]
+                            
                             if next_state in guaranteed_states:
-                                if max==1:
-                                    guaranteed = True
-                                    break
-                                else:
-                                    possible = True
+                                possible_action = True
                             elif next_state in unknown_states:
-                                possible = True
+                                possible_action = True
+                                guaranteed_action=False
+                            else:
+                                guaranteed_action=False
+                    if active_action:
+                        if max==1 and guaranteed_action:
+                            new_guaranteed.add(state)
+                            break
+                        elif max==1 and possible_action:
+                            new_unknown.add(state)
+                            break
 
-                    if max==1 and guaranteed:
-                        break
-                    if max==-1 and possible:
-                        break
+                        if max==-1 and not(possible_action):
+                            all_possible=False
+                        if max==-1 and not(guaranteed_action):
+                            all_guaranteed=False
+                    
 
-                if guaranteed:
-                    new_guaranteed.add(state)
-                elif possible:
-                    new_unknown.add(state)
+                if max==-1:
+                    if all_guaranteed:
+                        new_guaranteed.add(state)
+                    elif all_possible:
+                        new_unknown.add(state)
 
             if new_guaranteed:
                 changed = True
@@ -648,7 +662,7 @@ class MarkovChain():
 
                 #checks to avoid division by 0
                 if total==0:
-                    total=1
+                    continue
 
 
                 line_num=i*len(self.actions)+j
@@ -656,16 +670,17 @@ class MarkovChain():
                     
                     if k==i:
                         
-                        ineq_mat[line_num, k]=1-self.chain[self.actions[j]][unknown_indices[i]][unknown_indices[k]]/total
+                        ineq_mat[line_num, k]=-1+self.chain[self.actions[j]][unknown_indices[i]][unknown_indices[k]]/total
                     else:
-                        ineq_mat[line_num, k]=-self.chain[self.actions[j]][unknown_indices[i]][unknown_indices[k]]/total
-                ineq_vect[line_num]=sum([self.chain[self.actions[j]][unknown_indices[i]][k] for k in guaranteed_indices])/total
+                        ineq_mat[line_num, k]=self.chain[self.actions[j]][unknown_indices[i]][unknown_indices[k]]/total
+                ineq_vect[line_num]=-sum([self.chain[self.actions[j]][unknown_indices[i]][k] for k in guaranteed_indices])/total
 
         bounds=[[0,1] for i in range(n_unknown)]
-        c=[1 for i in range(n_unknown) ]
+        
         #minmax is respectively -1 or +1 to ensure the inequality is the right way
         ineq_mat=minmax*ineq_mat
         ineq_vect=minmax*ineq_vect
+        c=[minmax for i in range(n_unknown) ]
 
 
         probs_unknown=linprog(c=c, A_ub=ineq_mat, b_ub=ineq_vect, bounds=bounds)
