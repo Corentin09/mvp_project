@@ -516,9 +516,7 @@ class MarkovChain():
         sum_val_l=[sum(self.chain[""][i]) for i in range(self.n)]
         unknown_mat=np.array([[self.chain[""][i][j]/sum_val_l[i] for j in unknown_indices] for i in unknown_indices])
         win_vect=np.zeros(len(unknown_states))
-        print(win_vect)
         for i, idx in enumerate(unknown_indices):
-            print(i)
             win_vect[i]=sum([self.chain[""][unknown_indices[i]][j] for j in guaranteed_indices]) /sum_val_l[i]
         probs_unknown=np.linalg.solve(np.identity(len(unknown_states))-unknown_mat, win_vect)
         res=[0 for i in range(self.n)]
@@ -527,10 +525,6 @@ class MarkovChain():
         for j in unknown_indices:
             res[j]=probs_unknown[unknown_indices.index(j)]
         return res
-    
-    def compute_accessibility_prob_iterative_MDP(self, n_iter, end_states):
-        # TODO complete
-        pass
 
     def get_previous_states_MDP(self, state):
         """Return states with positive transition probability to `state`.
@@ -592,6 +586,7 @@ class MarkovChain():
 
                 all_guaranteed = True
                 all_possible = True
+                min_one_action = False
 
                 for action in self.actions:
                     active_action=False
@@ -611,6 +606,7 @@ class MarkovChain():
                             else:
                                 guaranteed_action=False
                     if active_action:
+                        min_one_action = True
                         if max==1 and guaranteed_action:
                             new_guaranteed.add(state)
                             break
@@ -623,11 +619,10 @@ class MarkovChain():
                         if max==-1 and not(guaranteed_action):
                             all_guaranteed=False
                     
-
                 if max==-1:
-                    if all_guaranteed:
+                    if all_guaranteed and min_one_action:
                         new_guaranteed.add(state)
-                    elif all_possible:
+                    elif all_possible and min_one_action:
                         new_unknown.add(state)
 
             if new_guaranteed:
@@ -726,9 +721,6 @@ class MarkovChain():
         ineq_vect=minmax*ineq_vect
         c=[minmax for i in range(n_unknown) ]
 
-        print(ineq_mat)
-        print(ineq_vect)
-        print(unknown_indices, guaranteed_indices, forbidden_indices)
         probs_unknown=linprog(c=c, A_ub=ineq_mat, b_ub=ineq_vect, bounds=bounds)
 
         res=[0 for i in range(self.n)]
@@ -738,6 +730,30 @@ class MarkovChain():
             res[j]=probs_unknown.x[unknown_indices.index(j)]
         return res
     
+    def compute_accessibility_prob_iterative_MDP(self, n_iter, end_states):
+        guaranteed_states, unknown_states, forbidden_states=self.get_initial_states_MC(end_states)
+        guaranteed_indices, unknown_indices, forbidden_indices=sorted(self.get_indices(guaranteed_states)), sorted(self.get_indices(unknown_states)), sorted(self.get_indices(forbidden_states))
+        sum_val_l=[sum(self.chain[""][i]) for i in range(self.n)]
+        unknown_mat=np.array([[self.chain[""][i][j]/sum_val_l[i] for j in unknown_indices] for i in unknown_indices])
+        win_vect=np.zeros(len(unknown_states))
+        for i in range(len(unknown_indices)):
+            win_vect[i]=sum([self.chain[""][unknown_indices[i]][j] for j in guaranteed_indices]) /sum_val_l[i]
+        x=np.zeros(len(unknown_states))
+        for i in range(n_iter):
+            x=unknown_mat@x+win_vect
+        return x
+    
+    def compute_expected_reward(self):
+        assert self.check_MC()
+        sum_val_l = [max(sum(self.chain[""][i]), 1e-10) for i in range(self.n)]  # Avoid division by zero
+        probability_mat = np.array([[self.chain[""][i][j] / sum_val_l[i] for j in range(self.n)] for i in range(self.n)])
+        rew_vect = np.array([self.rewards_dict[self.states[i]] for i in range(self.n)])
+
+        # Add small regularization to diagonal
+        epsilon = 1e-10
+        expected_rewards = np.linalg.solve(np.identity(self.n) - probability_mat + epsilon * np.identity(self.n), rew_vect)
+
+        return expected_rewards
 
 
 

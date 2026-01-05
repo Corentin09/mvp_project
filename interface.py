@@ -5,6 +5,7 @@ from tkinter import ttk, PhotoImage
 class Interface:
 
     def __init__(self, markov):
+        self.minmax = 1
         self.root = tk.Tk()
         self.root.title("MDP")
 
@@ -18,6 +19,7 @@ class Interface:
 
         self.actions_frame = tk.Frame(self.frame_controls)
         self.actions_frame.pack(pady=10)
+
         self.graph = markov
         self.history = [self.graph.current_state]
 
@@ -45,6 +47,26 @@ class Interface:
         
 
         self.target_menu.bind("<<ComboboxSelected>>", lambda e: self.analyze_target())
+        ttk.Label(self.frame_controls, text="Sélectionner un état :").pack()
+
+        self.selected = tk.StringVar()
+        self.current_menu = ttk.Combobox(
+            self.frame_controls,
+            textvariable=self.selected,
+            values=list(self.graph.states),
+            state="readonly"
+        )
+        self.current_menu.pack(pady=5)
+        
+
+        self.current_menu.bind("<<ComboboxSelected>>", lambda e: self.change_current())
+
+        if not self.graph.check_MC():
+            ttk.Button(
+                    self.frame_controls,
+                    text="minmax",
+                    command=lambda a=0: self.change_minmax()
+                ).pack(pady=3, fill="x")
 
         self.result_label = tk.Label(
             self.frame_controls,
@@ -54,6 +76,14 @@ class Interface:
         )
         self.result_label.pack(pady=10)
 
+        self.result_it_label = tk.Label(
+            self.frame_controls,
+            text="",
+            justify="left",
+            wraplength=300
+        )
+        self.result_it_label.pack(pady=10)
+
         self.result_min_label = tk.Label(
             self.frame_controls,
             text="",
@@ -62,6 +92,21 @@ class Interface:
         )
         self.result_min_label.pack(pady=10)
 
+        self.result_qual_label = tk.Label(
+            self.frame_controls,
+            text="",
+            justify="left",
+            wraplength=300
+        )
+        self.result_qual_label.pack(pady=10)
+
+        self.result_quan_label = tk.Label(
+            self.frame_controls,
+            text="",
+            justify="left",
+            wraplength=300
+        )
+        self.result_quan_label.pack(pady=10)
 
 
     def update_interface(self):
@@ -92,33 +137,69 @@ class Interface:
         self.target_menu.current(0)
         self.result_label.config(text="")
         self.result_min_label.config(text="")
+        self.result_quan_label.config(text="")
+        self.result_qual_label.config(text="")
         self.tot_reward += self.graph.rewards_dict[self.graph.current_state]
         self.reward_label.config(text=f"Récompense totale: {self.tot_reward}")
 
+    def change_minmax(self):
+        self.minmax = self.minmax*-1
+        self.analyze_target()
 
+    def change_current(self):
+        self.graph.current_state = list(self.graph.states)[self.current_menu.current()]
+        self.analyze_target()
+
+        
     def analyze_target(self):
         target = self.selected_target.get()
         if not target or target not in self.graph.states or target=="":
             self.g , self.u, self.r = None, None, None
             self.update_interface()
             self.result_label.config(text="")
+            self.result_it_label.config(text="")
+            self.result_min_label.config(text="")
+            self.result_quan_label.config(text="")
+            self.result_qual_label.config(text="")
+            self.result_qual_label.config(text="")
             return
-
         if self.graph.check_MC():
             self.g, self.u, self.r = self.graph.get_initial_states_MC([target])
         else:
-            self.g, self.u, self.r = self.graph.get_initial_states_MDP([target], -1)
+            self.g, self.u, self.r = self.graph.get_initial_states_MDP([target], self.minmax)
 
         self.update_interface()
         if self.graph.check_MC():
             prob = self.graph.compute_accessibility_prob_linear_MC([target])[self.graph.states.index(self.graph.current_state)]
+            prob_it = self.graph.compute_accessibility_prob_iterative_MDP(20, [target])[0]
+            exp = self.graph.compute_expected_reward()
+            print(exp)
+            res_qual = self.graph.SMC_qualitatif([target], 20, 0.01, 0.01, 0.32, 0.02)
+            res_quan = self.graph.SMC_quantitatif([target], 20, 0.01, 0.01)
 
             txt = (
             f"Probabilité d'y arriver depuis "
             f"{self.graph.current_state} : {prob*100}%"
             )
-
             self.result_label.config(text=txt)
+
+            txt = (
+            f"Probabilité d'y arriver depuis "
+            f"{self.graph.current_state} : {prob_it*100}%"
+            )
+
+            self.result_it_label.config(text=txt)
+            if res_qual[0]:
+                txt = f"L'état {target} est atteint par analyse qualitative"
+            else:
+                txt = f"L'état {target} n'est pas atteint par analyse qualitative"
+            self.result_qual_label.config(text=txt)
+
+            if res_quan[0]:
+                txt = f"L'état {target} est atteint par analyse quantitative"
+            else:
+                txt = f"L'état {target} n'est pas atteint par analyse quantitative"
+            self.result_quan_label.config(text=txt)
         else:
             prob_max = self.graph.compute_accessibility_prob_MDP([target], 1)[self.graph.states.index(self.graph.current_state)]
             prob_min = self.graph.compute_accessibility_prob_MDP([target], -1)[self.graph.states.index(self.graph.current_state)]
@@ -136,8 +217,9 @@ class Interface:
                 f"Probabilité minimale d'y arriver depuis "
                 f"{self.graph.current_state} : {prob_min*100}%"
             )
-
+            
             self.result_min_label.config(text=txt)
+
 
 
     def execute(self):
