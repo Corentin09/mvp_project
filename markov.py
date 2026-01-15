@@ -405,6 +405,14 @@ class MarkovChain():
         if self.rewards_dict:
             return chemin, choices, tot_prob, tot_reward
         return chemin, choices, tot_prob, None
+    
+    def check_rewards(self):
+        """Check if the model have rewards
+
+        Returns:
+            bool: True if the model has rewards, else False
+        """
+        return self.rewards_dict is not None
 
 
     def check_MC(self):
@@ -757,7 +765,17 @@ class MarkovChain():
 
 
 
-    
+    def get_average_reward(self, n_limit, delta, epsilon):
+        if not self.check_MC():
+            raise Exception("SMC only with MC")
+        rew = 0
+        n_simul=round((np.log(2)-np.log(delta))*(2*epsilon)**(-2))
+        for i in range(n_simul):
+            chemin, tot_prob, tot_reward=self.simulation_MC(n_limit)
+            for s in chemin:
+                rew +=self.rewards_dict[s]
+                
+        return rew/n_simul, n_simul
 
     def SMC_quantitatif(self, end_states, n_limit, delta, epsilon):
         """Estimate reachability probability via statistical model checking (quantitative).
